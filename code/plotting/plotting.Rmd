@@ -19,40 +19,10 @@ library(gtExtras)
 ```
 
 
-
-
-
-
 ```{r}
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/w1_for_plotting"
-w1_df <- read.csv(file_path)
+# define plotting functions
 
-# Create plot for feature distributions over play
-
-normalize_df <- w1_df %>% 
-  dplyr::select(time_after_snap, rusher_distance_from_qb_min, blockers_left_min,
-                 rusher_velocity_towards_qb_max,
-                 rusher_distance_from_qb_average, rusher_distance_toward_qb_gained_max,
-                 distance_of_closest_blocker_in_front_average, rusher_acceleration_towards_qb_max, a_qb, s_qb,
-                 disrupt_team) %>%
-  mutate(disrupt_team = as.factor( disrupt_team)) %>%
-  `colnames<-`(c("time_after_snap", "Min Rusher Distance From QB", "Min Blockers Left", "Max Rusher Velocity To QB",
-  "Average Rusher Distance to QB", "Max Rusher Distance Gained to QB", "Distance Closest Blocker", 
-  "Max Rusher Accelaration", "QB Acceleration", "QB Speed", "Disrupted Play")) %>%
-  mutate(time_after_snap = as.character(time_after_snap)) %>%
-  mutate_if(is.numeric, funs(scale)) %>% mutate(time_after_snap = as.numeric(time_after_snap))
-
-normalize_df %>% filter(time_after_snap <= 3.5) %>%
-  pivot_longer(!c(time_after_snap, `Disrupted Play`), values_to = "values", names_to = "variables") %>% 
-  ggplot(aes(x = values)) + geom_density(aes(fill = `Disrupted Play`), alpha = 0.3) +
-  facet_wrap(vars(variables), ncol = 3) + transition_time(time_after_snap) +
-  labs(title = "Team Level Feature Distributions {round(frame_time, 2)} Seconds After Snap") + ylim(0, 1) + xlim(-2.5, 2.5) +     
-  theme(strip.text.x = element_text(size = 7)) + xlab("Normalized Values") + ylab("Density")
-```
-
-
-```{r}
-plot_play <- function(file_path) {
+plot_play <- function(file_path, extra_yards_behind = 0) {
   play_plot_df <- read.csv(file_path) %>% dplyr::select(-X)
   describe <- play_plot_df$describe[1]
   rusher_df <- play_plot_df %>% dplyr::select(nflId, time_after_snap, rusher_metric, x, y) %>% 
@@ -78,20 +48,21 @@ plot_play <- function(file_path) {
   min_y <- min(rusher_df$y, qb_df$y, blocker_df$y)
   max_y <- max(rusher_df$y, qb_df$y, blocker_df$y)
   ggplot() +
-    geom_vline(aes(xintercept = seq(round_any(min_x, 5, f = floor) , round_any(max_x, 5, f = ceiling), by = 5)), 
+    geom_vline(aes(xintercept = seq(round_any(min_x, 5, f = floor) - extra_yards_behind*5 , 
+                                    round_any(max_x, 5, f = ceiling), by = 5)), 
                color = 'black') +
-    geom_segment(aes(x = seq(round_any(min_x, 5, f = floor), round_any(max_x, 5, f = ceiling), by = 1 ), 
-                     y = rep(70.9 / 3 - 0.5, length(seq(round_any(min_x, 5, f = floor), 
+    geom_segment(aes(x = seq(round_any(min_x, 5, f = floor)  - extra_yards_behind*5, round_any(max_x, 5, f = ceiling), by = 1 ), 
+                     y = rep(70.9 / 3 - 0.5, length(seq(round_any(min_x, 5, f = floor) - 5*extra_yards_behind, 
                                                            round_any(max_x, 5, f = ceiling), by = 1 )) ), 
-                     xend = seq(round_any(min_x, 5, f = floor), round_any(max_x, 5, f = ceiling), by = 1 ), 
-                     yend = rep(70.9 / 3 + 0.5, length(seq(round_any(min_x, 5, f = floor), 
+                     xend = seq(round_any(min_x, 5, f = floor) - extra_yards_behind*5, round_any(max_x, 5, f = ceiling), by = 1 ), 
+                     yend = rep(70.9 / 3 + 0.5, length(seq(round_any(min_x, 5, f = floor) - extra_yards_behind*5, 
                                                            round_any(max_x, 5, f = ceiling), by = 1 ))) ), 
                  color = 'black') +
-    geom_segment(aes(x = seq(round_any(min_x, 5, f = floor), round_any(max_x, 5, f = ceiling), by = 1 ), 
-                     y = rep(70.8 / 3 + 18.5 / 3 - 0.5, length(seq(round_any(min_x, 5, f = floor), 
+    geom_segment(aes(x = seq(round_any(min_x, 5, f = floor)  - extra_yards_behind*5, round_any(max_x, 5, f = ceiling), by = 1 ), 
+                     y = rep(70.8 / 3 + 18.5 / 3 - 0.5, length(seq(round_any(min_x, 5, f = floor)  - extra_yards_behind*5, 
                                                            round_any(max_x, 5, f = ceiling), by = 1 )) ), 
-                     xend = seq(round_any(min_x, 5, f = floor), round_any(max_x, 5, f = ceiling), by = 1 ), 
-                     yend = rep(70.8 / 3 + 18.5 / 3 + 0.5, length(seq(round_any(min_x, 5, f = floor), 
+                     xend = seq(round_any(min_x, 5, f = floor)  - extra_yards_behind*5, round_any(max_x, 5, f = ceiling), by = 1 ), 
+                     yend = rep(70.8 / 3 + 18.5 / 3 + 0.5, length(seq(round_any(min_x, 5, f = floor)  - extra_yards_behind*5, 
                                                            round_any(max_x, 5, f = ceiling), by = 1 ))) ), 
                  color = 'black') +
     geom_label(aes(x = x - 2, y = y, label = displayName), data = transfer_name_df) + 
@@ -108,13 +79,8 @@ plot_play <- function(file_path) {
     theme(panel.background = element_rect(fill = "white",
                                   colour = "white")) + labs(color="Rusher Metric")
 }
-```
 
 
-
-
-
-```{r}
 plot_prob_differences <- function(file_path) {
   diff_df <- read.csv(file_path) %>% dplyr::select(-X)
   describe <- diff_df$describe[1]
@@ -149,12 +115,41 @@ plot_metric_over_play <- function(file_path) {
   ggplot(aes(x = time_after_snap, y = prob, group = player_replaced, color = player_replaced), data = metric_df) +
     geom_line(size = 1) + geom_point(size = 2) +
     geom_hline(aes(yintercept = 0), linetype = 'dotted') +
-      transition_reveal(time_after_snap) + ylim(-0.3, 0.3) + 
+      transition_reveal(time_after_snap) + ylim(-0.4, 0.4) + 
     xlab('Time After Snap') + ggtitle('Metric Over Play') + 
     ylab('Player Contribution to Probability of Defensive Play Disruption' ) +
         theme(panel.background = element_rect(fill = "white",
                                       colour = "white")) + labs(color = 'Player')
 }
+```
+
+
+
+```{r}
+file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/w1_for_plotting"
+w1_df <- read.csv(file_path)
+
+# Create plot for feature distributions over play
+
+normalize_df <- w1_df %>% 
+  dplyr::select(time_after_snap, rusher_distance_from_qb_min, blockers_left_min,
+                 rusher_velocity_towards_qb_max,
+                 rusher_distance_from_qb_average, rusher_distance_toward_qb_gained_max,
+                 distance_of_closest_blocker_in_front_average, rusher_acceleration_towards_qb_max, a_qb, s_qb,
+                 disrupt_team) %>%
+  mutate(disrupt_team = as.factor( disrupt_team)) %>%
+  `colnames<-`(c("time_after_snap", "Min Rusher Distance From QB", "Min Blockers Left", "Max Rusher Velocity To QB",
+  "Average Rusher Distance to QB", "Max Rusher Distance Gained to QB", "Distance Closest Blocker", 
+  "Max Rusher Accelaration", "QB Acceleration", "QB Speed", "Disrupted Play")) %>%
+  mutate(time_after_snap = as.character(time_after_snap)) %>%
+  mutate_if(is.numeric, funs(scale)) %>% mutate(time_after_snap = as.numeric(time_after_snap))
+
+normalize_df %>% filter(time_after_snap <= 3.5) %>%
+  pivot_longer(!c(time_after_snap, `Disrupted Play`), values_to = "values", names_to = "variables") %>% 
+  ggplot(aes(x = values)) + geom_density(aes(fill = `Disrupted Play`), alpha = 0.3) +
+  facet_wrap(vars(variables), ncol = 3) + transition_time(time_after_snap) +
+  labs(title = "Team Level Feature Distributions {round(frame_time, 2)} Seconds After Snap") + ylim(0, 2) + xlim(-2.5, 2.5) + 
+  theme(strip.text.x = element_text(size = 7)) + xlab("Normalized Values") + ylab("Density")
 ```
 
 # plot play with probabilities
@@ -182,7 +177,7 @@ plot_metric_over_play(file_path)
 
 ```{r}
 file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/play_plot_20210912003480.csv"
-plot_play(file_path)
+plot_play(file_path, extra_yards_behind = 1)
 ```
 
 ```{r}
