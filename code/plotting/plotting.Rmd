@@ -16,17 +16,20 @@ library(plyr)
 library(gt)
 library(gtsummary)
 library(gtExtras)
+
+# curr_wd <- INSERT WD HERE
+setwd(curr_wd)
 ```
 
 
 ```{r}
 # define plotting functions
 
-plot_play <- function(file_path, extra_yards_behind = 0) {
+plot_play <- function(file_path, extra_yards_behind = 0, label_back = 2, ylims = 5, xlims = 5) {
   play_plot_df <- read.csv(file_path) %>% dplyr::select(-X)
   describe <- play_plot_df$describe[1]
   rusher_df <- play_plot_df %>% dplyr::select(nflId, time_after_snap, rusher_metric, x, y) %>% 
-    mutate(type = as.factor('rusher')) %>% mutate(blockerId = NA) %>% unique()
+    mutate(type = as.factor('rusher')) %>% mutate(blockerId = NA, rusher_metric = rusher_metric * 100) %>% unique()
   blocker_df <- play_plot_df %>% dplyr::select(blockerId, time_after_snap, x_block, y_block) %>% 
     mutate(type = as.factor('blocker')) %>% mutate(nflId = NA, rusher_metric= NA) %>%
     dplyr::rename('x' = 'x_block', 'y' = 'y_block') %>% unique()
@@ -65,19 +68,21 @@ plot_play <- function(file_path, extra_yards_behind = 0) {
                      yend = rep(70.8 / 3 + 18.5 / 3 + 0.5, length(seq(round_any(min_x, 5, f = floor)  - extra_yards_behind*5, 
                                                            round_any(max_x, 5, f = ceiling), by = 1 ))) ), 
                  color = 'black') +
-    geom_label(aes(x = x - 2, y = y, label = displayName), data = transfer_name_df) + 
+    geom_label(aes(x = x - label_back, y = y, label = displayName), data = transfer_name_df) + 
     geom_point(data = blocker_df, aes(x = x, y = y), shape = 23, size = 6, color = 'black') +
     geom_point(data = qb_df, aes(x = x, y = y), shape = 23, size = 6, color = 'black', fill = 'black') + 
     geom_point(data = rusher_df, aes(x = x, y = y, color = rusher_metric), size = 6) +
-    geom_label(aes(x = round_any(max_x, 5, f = ceiling) - 5, y = min_y - 1, label = paste0('Disruption Probability: ', 
+    geom_label(aes(x = round_any(max_x, 5, f = ceiling) - xlims, y = min_y - 1, label = paste0('Disruption Probability: ', 
                                                             round(prob_disrupt, 4) * 100, '%')),  size = 5, data = prob_df) + 
-    scale_colour_gradientn(colours = myPalette(100), limits = c(-0.15, 0.15),
+    scale_colour_gradientn(colours = myPalette(100), limits = c(-15, 15),
         oob = scales::squish) + 
     transition_time(time_after_snap) +
     labs(title = "Play Progression: {round(frame_time, 2)} Seconds After Snap", caption = describe) + 
     shadow_mark(past=TRUE, future=FALSE, alpha = 0.9, size = 3, exclude_layer = c(1, 2, 3, 4, 5, 6, 8) )  + theme_void() + 
     theme(panel.background = element_rect(fill = "white",
-                                  colour = "white")) + labs(color="Rusher Metric")
+                                  colour = "white")) + labs(color="Rusher IDPI Metric") +
+    ylim(min_y - ylims, max_y + ylims) + 
+    xlim(min_x - xlims, max_x + 2)
 }
 
 
@@ -94,10 +99,10 @@ plot_prob_differences <- function(file_path) {
   ggplot() +
     geom_line(aes(x = time_after_snap, y = prob, group = player_replaced, color = player_replaced), linetype="dotdash", size = 1, 
               data = replaced_df) +
-    geom_line(aes(x = time_after_snap, y = prob, group = player_replaced, color = 'Original'), 
+    geom_line(aes(x = time_after_snap, y = prob, group = player_replaced, lty = 'Original'), 
               color = 'black', size = 1.5, 
               data = original_df) + 
-    labs(color="Player Replaced", caption = describe) +
+    labs(color="Player Replaced", linetype = "", caption = describe) +
     xlab('Seconds After Snap') +
     ylab('Probability of Play Disruption')  + 
       theme(panel.background = element_rect(fill = "white",
@@ -110,14 +115,14 @@ plot_metric_over_play <- function(file_path) {
   metric_df <- read.csv(file_path) %>% dplyr::select(-X)
   
   metric_df <- metric_df %>% pivot_longer(!time_after_snap, names_to = 'player_replaced', values_to = 'prob') %>% 
-      mutate(player_replaced = gsub('\\.', ' ', player_replaced))
+      mutate(player_replaced = gsub('\\.', ' ', player_replaced), prob = prob * 100)
   
   ggplot(aes(x = time_after_snap, y = prob, group = player_replaced, color = player_replaced), data = metric_df) +
     geom_line(size = 1) + geom_point(size = 2) +
     geom_hline(aes(yintercept = 0), linetype = 'dotted') +
-      transition_reveal(time_after_snap) + ylim(-0.4, 0.4) + 
-    xlab('Time After Snap') + ggtitle('Metric Over Play') + 
-    ylab('Player Contribution to Probability of Defensive Play Disruption' ) +
+      transition_reveal(time_after_snap) + ylim(-65, 65) + 
+    xlab('Time After Snap') + ggtitle('IDPI Metric Over Play') + 
+    ylab('Metric' ) +
         theme(panel.background = element_rect(fill = "white",
                                       colour = "white")) + labs(color = 'Player')
 }
@@ -125,8 +130,8 @@ plot_metric_over_play <- function(file_path) {
 
 
 
-```{r}
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/w1_for_plotting"
+```{r, warning = F}
+file_path <- "data/w1_for_plotting"
 w1_df <- read.csv(file_path)
 
 # Create plot for feature distributions over play
@@ -142,76 +147,49 @@ normalize_df <- w1_df %>%
   "Average Rusher Distance to QB", "Max Rusher Distance Gained to QB", "Distance Closest Blocker", 
   "Max Rusher Accelaration", "QB Acceleration", "QB Speed", "Disrupted Play")) %>%
   mutate(time_after_snap = as.character(time_after_snap)) %>%
-  mutate_if(is.numeric, funs(scale)) %>% mutate(time_after_snap = as.numeric(time_after_snap))
+  mutate_if(is.numeric, funs(scale)) %>% mutate(time_after_snap = as.numeric(time_after_snap)) %>%
+  mutate(`Disrupted Play` = factor(`Disrupted Play`, levels = c('True', 'False')))
+
 
 normalize_df %>% filter(time_after_snap <= 3.5) %>%
   pivot_longer(!c(time_after_snap, `Disrupted Play`), values_to = "values", names_to = "variables") %>% 
   ggplot(aes(x = values)) + geom_density(aes(fill = `Disrupted Play`), alpha = 0.3) +
   facet_wrap(vars(variables), ncol = 3) + transition_time(time_after_snap) +
   labs(title = "Team Level Feature Distributions {round(frame_time, 2)} Seconds After Snap") + ylim(0, 2) + xlim(-2.5, 2.5) + 
-  theme(strip.text.x = element_text(size = 7)) + xlab("Normalized Values") + ylab("Density")
+  theme(strip.text.x = element_text(size = 7)) + xlab("Normalized Values") + ylab("Density") %>% 
+  scale_fill_manual(values = c('darkslategray1', 'lightpink'))
 ```
 
 # plot play with probabilities
 
-# sack: 20210912082010
-# hit: 20210912003480
-# hurry: 2021090900687
-# non-disrupt: 2021090900282
+# disrupt: 20210912043100
+# non-disrupt: 20210909001312
 
 ## Sack
 
-```{r}
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/play_plot_20210912082010.csv"
-plot_play(file_path)
+```{r, warning = F}
+file_path <- "data/play_plot_20210912043100.csv"
+plot_play(file_path, label_back = 3, ylims = 2, xlims = 5)
 ```
 
-```{r}
-
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/metric_plot_20210912082010.csv"
+```{r, warning = F}
+file_path <- "data/metric_plot_20210912043100.csv"
 plot_metric_over_play(file_path)
 ```
 
 
-# Hit
-
-```{r}
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/play_plot_20210912003480.csv"
-plot_play(file_path, extra_yards_behind = 1)
-```
-
-```{r}
-
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/metric_plot_20210912003480.csv"
-plot_metric_over_play(file_path)
-```
-
-# Hurry
-
-```{r}
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/play_plot_2021090900687.csv"
-plot_play(file_path)
-```
-
-```{r}
-
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/metric_plot_2021090900687.csv"
-plot_metric_over_play(file_path)
-```
 
 # Non-Disrupt
 
-```{r}
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/play_plot_2021090900282.csv"
-plot_play(file_path)
+```{r, warning = F}
+file_path <- "data/play_plot_20210909001312.csv"
+plot_play(file_path, extra_yards_behind = 1, label_back = 4, ylims = 1.5, xlims = 7)
 ```
 
-```{r}
-
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/metric_plot_2021090900282.csv"
+```{r, warning = F}
+file_path <- "data/metric_plot_20210909001312.csv"
 plot_metric_over_play(file_path)
 ```
-
 
 
 
@@ -220,17 +198,15 @@ plot_metric_over_play(file_path)
 # Difference in Probability Plot (Random Play)
 
 ```{r}
-file_path <- "/Users/nickbachelder/Desktop/Kaggle/Linemen/data/prob_differences_2021091200843.csv"
+file_path <- "data/prob_differences_20210912082010.csv"
 plot_prob_differences(file_path)
 ```
 
 
-
-
 # Rankings Table
 
-```{r}
-final_rankings <- read.csv('/Users/nickbachelder/Desktop/Kaggle/Linemen/data/final_metric_rankings.csv') %>% 
+```{r, warning = F}
+final_rankings <- read.csv('data/final_metric_rankings.csv') %>% 
   dplyr::select(-X)
 
 height_to_inches <- function(x) {
@@ -238,13 +214,18 @@ height_to_inches <- function(x) {
   return(inch)
 }
 
-final_rankings %>% dplyr::select(displayName, rank, metric, n_play, weight, height) %>%
-  mutate(weight = as.numeric(weight), height =  lapply(height, height_to_inches) %>% unlist() ) %>%
-  `colnames<-`(c('Name', 'Rank', 'Metric', 'Number of Active Plays', 'Weight (lb)', 'Height (In)')) %>% gt() %>%
-  gt_color_rows(columns = c(Metric, `Number of Active Plays`, `Weight (lb)`, `Height (In)`), 
+fr <- final_rankings %>% dplyr::select(displayName, rank, metric, n_play, weight, height, individual_disruptions) %>%
+  mutate(weight = as.numeric(weight), height =  lapply(height, height_to_inches) %>% unlist(),
+         metric = round(metric * 100, 3),
+         rank = seq(1, nrow(final_rankings)),
+         dis_per_play = round(individual_disruptions / n_play, 2)) %>%
+  filter(rank <= 20) %>%
+  `colnames<-`(c('Name', 'Rank', 'IDPI Metric', 'Number of Active Plays', 'Weight (lb)', 'Height (In)', 'Individual Play Disruptions', "Individual Disruptions per Play")) %>%
+  gt() %>%
+  gt_color_rows(columns = c(`IDPI Metric`, `Number of Active Plays`, `Weight (lb)`, `Height (In)`, `Individual Play Disruptions`, `Individual Disruptions per Play`), 
                 palette = "ggsci::blue_material", alpha = 0.4)
+gtsave(fr, 'submission/final_rankings.html')
 ```
-
 
 
 
