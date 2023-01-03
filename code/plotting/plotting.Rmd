@@ -156,8 +156,8 @@ normalize_df %>% filter(time_after_snap <= 3.5) %>%
   ggplot(aes(x = values)) + geom_density(aes(fill = `Disrupted Play`), alpha = 0.3) +
   facet_wrap(vars(variables), ncol = 3) + transition_time(time_after_snap) +
   labs(title = "Team Level Feature Distributions {round(frame_time, 2)} Seconds After Snap") + ylim(0, 2) + xlim(-2.5, 2.5) + 
-  theme(strip.text.x = element_text(size = 7)) + xlab("Normalized Values") + ylab("Density") %>% 
-  scale_fill_manual(values = c('darkslategray1', 'lightpink'))
+  theme(strip.text.x = element_text(size = 7)) + xlab("Normalized Values") + ylab('Density') +
+  scale_fill_manual(name = "Disruption", values = c('darkslategray1', 'lightpink'))
 ```
 
 # plot play with probabilities
